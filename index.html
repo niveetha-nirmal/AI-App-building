@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Sales Intelligence Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .drop-zone { border: 2px dashed #cbd5e1; transition: all 0.3s ease; }
+        .drop-zone.active { border-color: #4f46e5; background-color: #f5f3ff; }
+        .filter-select { @apply bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5; }
+        
+        @keyframes subtle-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        .risk-critical { animation: subtle-pulse 2s infinite ease-in-out; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <header class="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-slate-900">RetailPulse <span class="text-indigo-600">Intelligence</span></h1>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="generateSampleData()" class="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition">Demo Data</button>
+            <button onclick="exportCSV()" class="px-4 py-2 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition">Export CSV</button>
+        </div>
+    </header>
+
+    <main class="p-8 max-w-[1600px] mx-auto">
+        
+        <!-- File Upload Section -->
+        <div id="uploadSection" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div id="dropZoneSales" class="drop-zone rounded-xl p-8 text-center cursor-pointer bg-white group border-2">
+                <input type="file" id="fileSales" class="hidden" accept=".xlsx, .xls">
+                <div class="flex flex-col items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-300 group-hover:text-indigo-500 mb-3 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h4m-4-4l4 4-4 4m5-12a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h10.172a2 2 0 011.414.586l1.414 1.414c.188.188.442.293.707.293H20z" />
+                    </svg>
+                    <p class="text-sm font-semibold text-slate-700">retail_weekly_sales.xlsx</p>
+                    <div id="statusSales" class="mt-3 text-xs font-bold text-amber-500 uppercase tracking-wider">Ready for Upload</div>
+                </div>
+            </div>
+
+            <div id="dropZoneMaster" class="drop-zone rounded-xl p-8 text-center cursor-pointer bg-white group border-2">
+                <input type="file" id="fileMaster" class="hidden" accept=".xlsx, .xls">
+                <div class="flex flex-col items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-300 group-hover:text-indigo-500 mb-3 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <p class="text-sm font-semibold text-slate-700">store_master.xlsx</p>
+                    <div id="statusMaster" class="mt-3 text-xs font-bold text-amber-500 uppercase tracking-wider">Ready for Upload</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8 border border-slate-200">
+            <h2 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">Intelligent Data Filters</h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div><label class="block text-xs font-medium mb-1">Week (Start Date)</label><select id="filterWeekDate" class="filter-select" onchange="applyFilters()"><option value="All">All Weeks</option></select></div>
+                <div><label class="block text-xs font-medium mb-1">Region</label><select id="filterRegion" class="filter-select" onchange="applyFilters()"><option value="All">All Regions</option></select></div>
+                <div><label class="block text-xs font-medium mb-1">City</label><select id="filterCity" class="filter-select" onchange="applyFilters()"><option value="All">All Cities</option></select></div>
+                <div><label class="block text-xs font-medium mb-1">Store Format</label><select id="filterFormat" class="filter-select" onchange="applyFilters()"><option value="All">All Formats</option></select></div>
+                <div><label class="block text-xs font-medium mb-1">Product Category</label><select id="filterCategory" class="filter-select" onchange="applyFilters()"><option value="All">All Categories</option></select></div>
+                <div><label class="block text-xs font-medium mb-1">Store Name</label><select id="filterStore" class="filter-select" onchange="applyFilters()"><option value="All">All Stores</option></select></div>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Net Sales</p>
+                <h3 id="kpiNetSales" class="text-2xl font-bold mt-1">$0</h3>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Target Achiev.</p>
+                <h3 id="kpiTarget" class="text-2xl font-bold mt-1">0%</h3>
+                <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden">
+                    <div id="kpiTargetBar" class="bg-indigo-500 h-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Avg Trans. Value</p>
+                <h3 id="kpiATV" class="text-2xl font-bold mt-1">$0</h3>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Return Rate</p>
+                <h3 id="kpiReturn" class="text-2xl font-bold mt-1 text-red-600">0%</h3>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-sm font-medium text-slate-500">Discount Rate</p>
+                <h3 id="kpiDiscount" class="text-2xl font-bold mt-1">0%</h3>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-4">Chronological Sales Trend</h3>
+                <div class="chart-container"><canvas id="chartTrend"></canvas></div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-4">Regional Performance</h3>
+                <div class="chart-container"><canvas id="chartRegion"></canvas></div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-4">Category Analysis</h3>
+                <div class="chart-container"><canvas id="chartCategory"></canvas></div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-4">Top 5 Stores</h3>
+                <div class="chart-container"><canvas id="chartStoreLeader"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Insights & Risk Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 bg-slate-900 text-white p-8 rounded-2xl shadow-xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Business Insights
+                    </h3>
+                    <button onclick="exportInsights()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded border border-slate-700">Copy Analysis</button>
+                </div>
+                <div id="insightContent" class="space-y-4 text-slate-300 leading-relaxed text-sm">
+                    No data analysis available.
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Stockout Risks
+                </h3>
+                <div id="stockoutList" class="space-y-3 overflow-y-auto max-h-[300px]">
+                    <p class="text-sm text-slate-500 italic">No risks detected.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let rawSalesData = null, rawMasterData = null, joinedData = null, filteredData = null, charts = {};
+
+        window.onload = () => initDropZones();
+
+        function initDropZones() {
+            ['Sales', 'Master'].forEach(type => {
+                const zone = document.getElementById(`dropZone${type}`);
+                const input = document.getElementById(`file${type}`);
+                zone.onclick = () => input.click();
+                zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('active'); };
+                zone.ondragleave = () => zone.classList.remove('active');
+                zone.ondrop = (e) => { e.preventDefault(); zone.classList.remove('active'); handleFile(e.dataTransfer.files[0], type); };
+                input.onchange = (e) => handleFile(e.target.files[0], type);
+            });
+        }
+
+        function standardizeData(json) {
+            return json.map(row => {
+                const newRow = {};
+                for (let key in row) {
+                    const norm = key.toLowerCase().trim().replace(/ /g, '_');
+                    // Map variations to standardized keys
+                    if (norm.includes('week_start_date') || norm === 'week_start') newRow['week_start_date'] = row[key];
+                    else if (norm.includes('category')) newRow['product_category'] = row[key];
+                    else newRow[norm] = row[key];
+                }
+                return newRow;
+            });
+        }
+
+        function handleFile(file, type) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                let json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                json = standardizeData(json);
+                if (type === 'Sales') {
+                    rawSalesData = json;
+                    document.getElementById('statusSales').innerHTML = '<span class="text-green-600 font-bold">✅ File Loaded</span>';
+                } else {
+                    rawMasterData = json;
+                    document.getElementById('statusMaster').innerHTML = '<span class="text-green-600 font-bold">✅ File Loaded</span>';
+                }
+                if (rawSalesData && rawMasterData) processData();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processData() {
+            joinedData = rawSalesData.map(sale => ({ 
+                ...sale, 
+                ...(rawMasterData.find(m => m.store_id == sale.store_id) || {}) 
+            }));
+            populateFilters();
+            applyFilters();
+        }
+
+        function populateFilters() {
+            const getUnique = (key) => [...new Set(joinedData.map(d => d[key]))].filter(v => v).sort();
+            
+            // Special sorting for Dates
+            const getUniqueDates = () => {
+                const dates = [...new Set(joinedData.map(d => d.week_start_date))].filter(v => v);
+                return dates.sort((a,b) => new Date(a) - new Date(b));
+            };
+
+            const fill = (id, items) => {
+                const el = document.getElementById(id);
+                el.innerHTML = '<option value="All">All</option>' + items.map(v => `<option value="${v}">${v}</option>`).join('');
+            };
+
+            fill('filterWeekDate', getUniqueDates());
+            fill('filterRegion', getUnique('region'));
+            fill('filterCity', getUnique('city'));
+            fill('filterFormat', getUnique('store_format'));
+            fill('filterCategory', getUnique('product_category'));
+            fill('filterStore', getUnique('store_name'));
+        }
+
+        function applyFilters() {
+            if (!joinedData) return;
+            const f = {
+                week: document.getElementById('filterWeekDate').value,
+                reg: document.getElementById('filterRegion').value,
+                city: document.getElementById('filterCity').value,
+                fmt: document.getElementById('filterFormat').value,
+                cat: document.getElementById('filterCategory').value,
+                store: document.getElementById('filterStore').value
+            };
+
+            filteredData = joinedData.filter(d => 
+                (f.week === 'All' || d.week_start_date == f.week) &&
+                (f.reg === 'All' || d.region == f.reg) &&
+                (f.city === 'All' || d.city == f.city) &&
+                (f.fmt === 'All' || d.store_format == f.fmt) &&
+                (f.cat === 'All' || d.product_category == f.cat) &&
+                (f.store === 'All' || d.store_name == f.store)
+            );
+
+            updateKPIs(); renderCharts(); generateInsights(); updateStockoutRisk();
+        }
+
+        function updateKPIs() {
+            const t = filteredData.reduce((acc, c) => {
+                acc.n += (Number(c.net_sales) || 0); acc.tg += (Number(c.target_sales) || 0);
+                acc.tx += (Number(c.transactions) || 0); acc.rt += (Number(c.return_amount) || 0);
+                acc.ds += (Number(c.discount_amount) || 0); acc.gr += (Number(c.gross_sales) || 0);
+                return acc;
+            }, { n:0, tg:0, tx:0, rt:0, ds:0, gr:0 });
+
+            document.getElementById('kpiNetSales').innerText = `$${t.n.toLocaleString()}`;
+            document.getElementById('kpiTarget').innerText = `${(t.tg > 0 ? (t.n/t.tg*100) : 0).toFixed(1)}%`;
+            document.getElementById('kpiTargetBar').style.width = `${Math.min((t.tg > 0 ? (t.n/t.tg*100) : 0), 100)}%`;
+            document.getElementById('kpiATV').innerText = `$${(t.tx > 0 ? (t.n/t.tx) : 0).toFixed(2)}`;
+            document.getElementById('kpiReturn').innerText = `${(t.n > 0 ? (t.rt/t.n*100) : 0).toFixed(1)}%`;
+            document.getElementById('kpiDiscount').innerText = `${(t.gr > 0 ? (t.ds/t.gr*100) : 0).toFixed(1)}%`;
+        }
+
+        function renderCharts() {
+            Object.values(charts).forEach(c => c.destroy());
+            
+            const agg = (key) => filteredData.reduce((acc, curr) => { 
+                acc[curr[key]] = (acc[curr[key]] || 0) + (Number(curr.net_sales) || 0); 
+                return acc; 
+            }, {});
+
+            // TREND CHART (Chronological)
+            const trendDataRaw = agg('week_start_date');
+            const trendSortedLabels = Object.keys(trendDataRaw).sort((a,b) => new Date(a) - new Date(b));
+            
+            charts.trend = new Chart(document.getElementById('chartTrend'), {
+                type: 'line',
+                data: { labels: trendSortedLabels, datasets: [{ label: 'Net Sales', data: trendSortedLabels.map(l => trendDataRaw[l]), borderColor: '#6366f1', fill: true, backgroundColor: 'rgba(99, 102, 241, 0.05)', tension: 0.2 }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            const regData = agg('region');
+            charts.region = new Chart(document.getElementById('chartRegion'), { type: 'bar', data: { labels: Object.keys(regData), datasets: [{ label: 'Sales', data: Object.values(regData), backgroundColor: '#4f46e5' }] }, options: { responsive: true, maintainAspectRatio: false }});
+            
+            const catData = agg('product_category');
+            charts.cat = new Chart(document.getElementById('chartCategory'), { type: 'doughnut', data: { labels: Object.keys(catData), datasets: [{ data: Object.values(catData), backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }}}});
+            
+            const storeSales = agg('store_name');
+            const top5 = Object.entries(storeSales).sort((a,b) => b[1]-a[1]).slice(0,5);
+            charts.store = new Chart(document.getElementById('chartStoreLeader'), { type: 'bar', data: { labels: top5.map(x=>x[0]), datasets: [{ label: 'Net Sales', data: top5.map(x=>x[1]), backgroundColor: '#1e293b' }] }, options: { indexAxis:'y', responsive: true, maintainAspectRatio: false }});
+        }
+
+        function generateInsights() {
+            if(!filteredData.length) return;
+            const regionSales = filteredData.reduce((acc, curr) => { acc[curr.region] = (acc[curr.region] || 0) + (Number(curr.net_sales) || 0); return acc; }, {});
+            const sortedRegions = Object.entries(regionSales).sort((a,b) => b[1]-a[1]);
+            document.getElementById('insightContent').innerHTML = `
+                <ul class="space-y-2">
+                    <li>🎯 <b>Regional Lead:</b> ${sortedRegions[0][0]} is your strongest market this period.</li>
+                    <li>📊 <b>KPI Status:</b> Overall achievement is at ${document.getElementById('kpiTarget').innerText}.</li>
+                    <li>💹 <b>Trend:</b> Review chronological shifts in the trend chart for seasonal velocity.</li>
+                </ul>`;
+        }
+
+        function updateStockoutRisk() {
+            const risks = filteredData.filter(d => d.stock_level < 25).sort((a,b) => a.stock_level - b.stock_level);
+            const container = document.getElementById('stockoutList');
+            if(!risks.length) { container.innerHTML = `<p class="text-sm text-slate-500 italic">Inventory levels stable.</p>`; return; }
+            container.innerHTML = risks.slice(0, 10).map(r => `
+                <div class="flex items-stretch overflow-hidden rounded-lg border shadow-sm ${r.stock_level < 10 ? 'bg-red-50 border-red-200 risk-critical' : 'bg-orange-50 border-orange-100'}">
+                    <div class="w-1.5 ${r.stock_level < 10 ? 'bg-red-600' : 'bg-orange-500'}"></div>
+                    <div class="flex-1 p-3 flex justify-between items-center">
+                        <div>
+                            <p class="text-[10px] font-black ${r.stock_level < 10 ? 'text-red-700' : 'text-orange-700'} tracking-widest leading-none mb-1">${r.stock_level < 10 ? 'CRITICAL' : 'WARNING'}</p>
+                            <p class="text-sm font-bold text-slate-900">${r.store_name}</p>
+                            <p class="text-[11px] text-slate-500">${r.product_category}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-lg font-black ${r.stock_level < 10 ? 'text-red-700' : 'text-orange-700'} leading-none">${r.stock_level}</p>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase">Stock</p>
+                        </div>
+                    </div>
+                </div>`).join('');
+        }
+
+        function exportCSV() {
+            if(!filteredData) return alert("No data");
+            const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(filteredData));
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            link.download = "retail_data_export.csv";
+            link.click();
+        }
+
+        function exportInsights() {
+            navigator.clipboard.writeText(document.getElementById('insightContent').innerText);
+            alert("Insights copied!");
+        }
+
+        function generateSampleData() {
+            const regs = ['North', 'South', 'East', 'West'], cats = ['Electronics', 'Grocery', 'Apparel'];
+            const dates = ['2023-11-06', '2023-11-13', '2023-11-20', '2023-11-27'];
+            rawMasterData = Array.from({length: 6}, (_, i) => ({ store_id: i+1, store_name: `Store ${100+i}`, region: regs[i%4], city: 'City '+i, store_format: 'Retail' }));
+            rawSalesData = [];
+            dates.forEach(d => {
+                rawMasterData.forEach(s => cats.forEach(c => {
+                    const v = Math.floor(Math.random() * 9000);
+                    rawSalesData.push({ 
+                        store_id: s.store_id, 
+                        week_start_date: d, 
+                        product_category: c, 
+                        net_sales: v, 
+                        target_sales: 8000, 
+                        transactions: 150, 
+                        return_amount: v*0.05, 
+                        discount_amount: v*0.1, 
+                        gross_sales: v*1.1, 
+                        stock_level: Math.floor(Math.random()*40) 
+                    });
+                }));
+            });
+            processData();
+        }
+    </script>
+</body>
+</html>
